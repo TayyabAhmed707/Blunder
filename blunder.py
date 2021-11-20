@@ -2,7 +2,7 @@ import numpy as np
 import pygame
 import math
 
-#git test
+#git test works
 #initialize pygame
 pygame.init()
 
