@@ -106,6 +106,7 @@ class object_3d:
             [-math.sin(y),  math.cos(y)*math.sin(z),    math.cos(y)*math.cos(z)]
         ])
         # apply=True if you want to update the object coordinates to the calculated coordinates
+   
     def rotate(self, angles):
         self.points = np.dot(self.points,self.get_rotation_matrix(angles))
 
@@ -337,8 +338,12 @@ class Window:
 
                             else:
                                 self.active_object.check_for_collisions(self.get_mouse_pos()+self.origin)
-
-                        
+                        else:
+                            if pygame.key.get_pressed()[pygame.K_LSHIFT]:
+                                self.select_object(self.get_mouse_pos()+self.origin, False)
+                            else:
+                                self.select_object(self.get_mouse_pos()+self.origin)
+                                
                     elif event.button == 3:
                         self.right_click_down = True
                         self.right_click_start_pos = self.get_mouse_pos()
@@ -414,17 +419,26 @@ class Window:
                             for obj in self.objects[self.selected_objects]:
                                 obj.revert_snapshot()
                             self.update_message('along y-axis')
+
                     elif event.key == pygame.K_z:
                          if self.mode[1] != 'none':
                             self.active_axis = np.array([0,0,1])
                             for obj in self.objects[self.selected_objects]:
                                 obj.revert_snapshot()
                             self.update_message('along z-axis')
+
+                    elif event.key == pygame.K_n:
+                        if pygame.key.get_pressed()[pygame.K_LSHIFT]:
+                            self.active_object = object_3d()
+                            self.selected_objects = [len(self.selected_objects)]
+                            self.objects = np.append(self.objects,self.active_object)
+
+
                     elif event.key == pygame.K_TAB:
                         if self.mode[0] == 'object':
                             self.mode[0] = 'edit'
                             self.mode[1] = 'none'
-                            self.active_object =self.objects[self.selected_objects[0]]
+                            self.active_object =self.objects[self.selected_objects[-1]]
 
                         else:
                             self.mode[0] = 'object'
@@ -480,15 +494,42 @@ class Window:
 
 
         self.draw_message_window()
-
-        
-        
         pygame.display.update()
     
     def get_mouse_pos(self):
         pos = pygame.mouse.get_pos() - self.origin
         return pos
     
+
+    def select_object(self,pos ,clear=True):
+        if clear:
+            for obj in self.objects:
+                obj.is_selected = False
+            self.selected_objects = []
+        
+        for i in range(self.objects.shape[0]):
+            points = self.objects[i].projected_points
+            max_x = points[:,0].max()
+            max_y = points[:,1].max()
+            min_x = points[:,0].min()
+            min_y = points[:,1].min()
+            print(pos)
+            print("max_x "+str(max_x))
+            print("min_x "+str(min_x))
+            print("max_y "+str(max_y))
+            print("min_y "+str(min_y))
+            if pos[0] > min_x and pos[0] < max_x and pos[1] > min_y and pos[1] < max_y:
+                self.selected_objects.append(i)
+                self.active_object = self.objects[i]
+                self.objects[i].is_selected = True
+
+                return
+
+        self.selected_objects = []
+
+
+
+
     def get_tranform_magnitute(self):
         drag_vector = self.get_mouse_pos() - self.mouse_last_pos 
         drag_magnitude = np.linalg.norm(drag_vector)
