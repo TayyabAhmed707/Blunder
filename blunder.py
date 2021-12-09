@@ -395,6 +395,13 @@ class Window:
                         for obj in self.objects[self.selected_objects]:
                             obj.take_snapshot()
 
+                    elif event.key == pygame.K_i:
+                        if self.mode[0] == 'edit':
+                            self.mode[1] = 'inset'
+                        self.mouse_last_pos = self.get_mouse_pos()
+                        for obj in self.objects[self.selected_objects]:
+                            obj.take_snapshot()
+
                     elif event.key == pygame.K_x:
                         if self.mode[1] != 'none':
                             self.active_axis = np.array([1,0,0])
@@ -557,7 +564,11 @@ class Window:
             self.active_axis = self.active_object.extrude()
             self.mode[1] = 'translate'
 
-             
+        
+        if self.mode[1] == 'inset':
+            self.active_object.extrude()
+            self.active_object.scale_quads(self.active_axis*0.5)
+            self.mode[1] = 'scale'
 
         for obj in self.objects:
             obj.project_to_2d(self.origin, self.camera.get_camera_tranform())
