@@ -1,10 +1,9 @@
 import numpy as np
+from numpy.lib.function_base import select
 from numpy.linalg import norm
 import pygame
 import math
-
-#git test 2
-#initialize pygame
+import copy
 
 class object_3d:
 
@@ -18,6 +17,7 @@ class object_3d:
         # |/      |/
         # 7−−−−−−−4
         
+        # the Actual points
         self.points = np.array([
             [50,50,50],
             [50,-50,50],
@@ -29,8 +29,10 @@ class object_3d:
             [-50,50,-50]
             ])
 
+        # backup when tranforming to revert
         self.untransformed_points = np.array(self.points)
 
+        # The Actuals points
         self.quads = np.array([
             [0,1,2,3],
             [4,7,6,5],
@@ -39,14 +41,22 @@ class object_3d:
             [3,7,4,0],
             [2,1,5,6]
         ])
+
         self.is_selected = True
+        # Points after camera transformations
         self.camera_coorinates = np.zeros_like(self.points)
+        # Points after projected to 2D
         self.projected_points = np.zeros((self.points.shape[0],2))
+        # normals of the quads
         self.normals = np.zeros((self.quads.shape[0],1))
+        # shading information for each quad
         self.shades = np.zeros((self.quads.shape[0],1))
         self.selected_quads = []
         self.calculate_shades()
+        # backup when transforming to revert
         self.selected_quads_history=[]
+        # midpoints of the quads
+        self.midpoint = np.array([0,0,0])
 
     def take_snapshot(self):
         self.untransformed_points = np.array(self.points)
@@ -59,6 +69,7 @@ class object_3d:
         self.selected_quads = self.selected_quads_history
 
     def project_to_2d(self, origin, camera_axis):
+        self.calculate_midpoint()
         projection_mat = np.array([
             [1,0,0],
             [0,1,0]
@@ -88,6 +99,9 @@ class object_3d:
         deg = 200* deg/deg.max() + 55
         self.shades= np.tile((deg).transpose(), (1, 3)).astype("uint8")
     
+    def calculate_midpoint(self):
+        self.midpoint = np.sum(self.camera_coorinates, axis=0) / self.camera_coorinates.shape[0]
+
     def sort_quads(self):
         cam_coords = self.camera_coorinates
         quad_midpoints = (cam_coords[self.quads[:,0]]+cam_coords[self.quads[:,1]]+cam_coords[self.quads[:,2]]+cam_coords[self.quads[:,3]])/4
@@ -105,7 +119,7 @@ class object_3d:
             [math.sin(x)*math.cos(y),   math.sin(x)*math.sin(y)*math.sin(z) + math.cos(x)*math.cos(z),  math.sin(x)*math.sin(y)*math.cos(z) - math.cos(x)*math.sin(z)],
             [-math.sin(y),  math.cos(y)*math.sin(z),    math.cos(y)*math.cos(z)]
         ])
-        # apply=True if you want to update the object coordinates to the calculated coordinates
+      
    
     def rotate(self, angles):
         self.points = np.dot(self.points,self.get_rotation_matrix(angles))
@@ -188,7 +202,7 @@ class object_3d:
         self.selected_quads = [self.quads.shape[0]]
         self.points = np.append(self.points, new_points, axis=0)
         self.quads = np.append(self.quads, new_quads, axis=0)
-        print(self.points)
+        
         
         normal = np.cross(self.points[new_quad[2]]-self.points[new_quad[1]], self.points[new_quad[0]]-self.points[new_quad[1]])
 
@@ -197,8 +211,6 @@ class object_3d:
         normal[2] = -normal[2]
         return normal
 
-
-        
     def check_for_collisions(self, pos, deselect=True):
         sorted_quads = self.sort_quads()
         if deselect:
@@ -212,7 +224,6 @@ class object_3d:
             
             if pos[0] > min_x and pos[0] < max_x and pos[1] > min_y and pos[1] < max_y:
                 self.selected_quads.append(i)
-                print('working')
                 return
 
         self.selected_quads = []
@@ -251,7 +262,6 @@ class Camera:
 
         return self.tranform
 
-
     def zoom_in(self):
         self.zoom += 0.1
 
@@ -269,7 +279,6 @@ class Camera:
 
 
         
-
 class Window:
     def __init__(self, width, height, fps):
         self.running = True
@@ -297,8 +306,7 @@ class Window:
         self.extruded = False
 
         self.drag_vector = None
-        
-
+ 
     def main(self):
         clock = pygame.time.Clock()
         while self.running:
@@ -312,7 +320,6 @@ class Window:
             self.update()
             self.draw()
             
-    
     def event_handler(self):
         for event in pygame.event.get():
                 if event.type==pygame.QUIT:
@@ -320,10 +327,12 @@ class Window:
                 elif event.type == pygame.MOUSEBUTTONDOWN:
                     #1 - left click,    2 - middle click    3 - right click     4 - scroll up      5 - scroll down
                     
+                    #   LEFT CLICK
                     if event.button == 1:
                         self.left_click_down = True
                         self.left_click_start_pos = self.get_mouse_pos()
 
+                        # if doing any transformation, apply it
                         if self.mode[1] != 'none':
                             if self.mode[1] == 'extrude':
                                 self.extruded = False
@@ -331,7 +340,7 @@ class Window:
                             self.active_axis = np.array([1,1,1])
                             self.update_message('')
                         
-
+                        # select quads/objects
                         if self.mode[0] == 'edit':
                             if pygame.key.get_pressed()[pygame.K_LSHIFT]:
                                 self.active_object.check_for_collisions(self.get_mouse_pos()+self.origin, False)
@@ -343,7 +352,9 @@ class Window:
                                 self.select_object(self.get_mouse_pos()+self.origin, False)
                             else:
                                 self.select_object(self.get_mouse_pos()+self.origin)
-                                
+
+
+                    # RIGHT CLICK     
                     elif event.button == 3:
                         self.right_click_down = True
                         self.right_click_start_pos = self.get_mouse_pos()
@@ -356,20 +367,25 @@ class Window:
                                 self.mode[1] = 'none'
                                 self.update_message('')
 
+                    # SCROLL UP
                     elif event.button == 4:
                         self.camera.zoom_in()
+                    # SCROLL DOWN
                     elif event.button == 5:
                         self.camera.zoom_out()
         
-    
+                # BUTTON RELEASED
                 elif event.type == pygame.MOUSEBUTTONUP:
                 
                     if event.button == 1:
                         self.left_click_down = False
                     elif event.button == 3:
                         self.right_click_down = False
-
+                
+                # KEYBOARD EVENT
                 elif event.type == pygame.KEYDOWN:
+                    
+                    # Scale
                     if event.key == pygame.K_s:
                         self.update_message('Scaling in all directions, press x, y or z for a specific axis')
                         self.mode[1] = 'scale'
@@ -377,6 +393,7 @@ class Window:
                         for obj in self.objects[self.selected_objects]:
                             obj.take_snapshot()
 
+                    # Rotate
                     elif event.key == pygame.K_r:
                         self.update_message('Press x, y or z for a specific axis For rotation')
                         self.active_axis = np.array([0,1,0])
@@ -385,6 +402,7 @@ class Window:
                         for obj in self.objects[self.selected_objects]:
                             obj.take_snapshot()
 
+                    # Translate
                     elif event.key == pygame.K_t:
                         self.update_message('Press x, y or z for a specific axis For Translation')
                         self.active_axis = np.array([0,1,0])
@@ -393,13 +411,15 @@ class Window:
                         for obj in self.objects[self.selected_objects]:
                             obj.take_snapshot()
                     
+                    # Extrude
                     elif event.key == pygame.K_e:
                         if self.mode[0] == 'edit':
                             self.mode[1] = 'extrude'
                         self.mouse_last_pos = self.get_mouse_pos()
                         for obj in self.objects[self.selected_objects]:
                             obj.take_snapshot()
-
+                    
+                    # Inset
                     elif event.key == pygame.K_i:
                         if self.mode[0] == 'edit':
                             self.mode[1] = 'inset'
@@ -407,12 +427,15 @@ class Window:
                         for obj in self.objects[self.selected_objects]:
                             obj.take_snapshot()
 
+                    # lock X axis
                     elif event.key == pygame.K_x:
                         if self.mode[1] != 'none':
                             self.active_axis = np.array([1,0,0])
                             for obj in self.objects[self.selected_objects]:
                                 obj.revert_snapshot()
                             self.update_message('along x-axis')
+                    
+                    # lock Y axis
                     elif event.key == pygame.K_y:
                         if self.mode[1] != 'none':
                             self.active_axis = np.array([0,1,0])
@@ -420,6 +443,7 @@ class Window:
                                 obj.revert_snapshot()
                             self.update_message('along y-axis')
 
+                    # lock Z axis
                     elif event.key == pygame.K_z:
                          if self.mode[1] != 'none':
                             self.active_axis = np.array([0,0,1])
@@ -427,13 +451,40 @@ class Window:
                                 obj.revert_snapshot()
                             self.update_message('along z-axis')
 
+                    # Select All
+                    elif event.key == pygame.K_a:
+                        for obj in self.objects:
+                            obj.is_selected = True
+                        self.selected_objects = range(self.objects.shape[0])
+                        self.active_object = self.objects[self.selected_objects[-1]]
+
                     elif event.key == pygame.K_n:
                         if pygame.key.get_pressed()[pygame.K_LSHIFT]:
                             self.active_object = object_3d()
                             self.selected_objects = [len(self.selected_objects)]
                             self.objects = np.append(self.objects,self.active_object)
 
+                    # SHIFT + D Duplicate objects
+                    elif event.key == pygame.K_d:
+                        if pygame.key.get_pressed()[pygame.K_LSHIFT]:
+                            if self.mode[0] == 'object' and self.selected_objects:
+                                new_objects = []
+                                for i in self.selected_objects:
+                                    new_objects.append(copy.deepcopy(self.objects[i]))
+                                old_len = self.objects.shape[0]
+                                self.objects = np.append(self.objects, new_objects)
+                                new_len = self.objects.shape[0]
+                                self.selected_objects = range(old_len,new_len)
+                                self.active_object =  self.selected_objects[-1]
+                                self.update_message('Press x, y or z for a specific axis For Translation')
+                                self.active_axis = np.array([0,1,0])
+                                self.mode[1] = 'translate'
+                                self.mouse_last_pos = self.get_mouse_pos()
+                                for obj in self.objects[self.selected_objects]:
+                                    obj.take_snapshot()
+                                
 
+                    # Switch mode
                     elif event.key == pygame.K_TAB:
                         if self.mode[0] == 'object':
                             self.mode[0] = 'edit'
@@ -443,8 +494,6 @@ class Window:
                         else:
                             self.mode[0] = 'object'
                             self.mode[1] = 'none'
-                            print(self.mode)
-
                     
     def draw_axis(self, bases):
         projection_mat = np.array([
@@ -469,25 +518,40 @@ class Window:
         textRect.center = (self.width // 2, 15)
         self.window.blit(self.message, textRect)
 
+    def sort_objects(self):
+        z_value= np.zeros((self.objects.shape[0]))
+       
+        for i in range(self.objects.shape[0]):
+            z_value[i]= self.objects[i].midpoint[2]
+
+
+        return np.argsort(z_value.astype('int16'))
+
     def update_message(self, message):
         
         self.message =self.font.render(message,True,(255,255,255),(50,50,50))
 
     def draw(self):
+        # clear frame
         self.window.fill((30,30,30))
+        # draw the axis
         self.draw_axis(self.camera.get_camera_tranform())
-
-        
-        for obj in self.objects:
+        # sort the objects from furthest to the closest to the camera
+        sorted_objects = self.sort_objects()
+        for obj in self.objects[sorted_objects]:
             obj.calculate_shades()
+            # sort the quads from furthest to the closest to the camer
             sorted_quads = obj.sort_quads()
-
+            
+            # Draw selection outline if object mode and selected
             if self.mode[0] =='object' and obj.is_selected:
                 for i in sorted_quads:
                     pygame.draw.polygon(self.window,(255, 167, 66),np.array([obj.projected_points[obj.quads[i,0]], obj.projected_points[obj.quads[i,1]], obj.projected_points[obj.quads[i,2]], obj.projected_points[obj.quads[i,3]]]),width=5) 
+            # Draw the quad
             for i in sorted_quads:
                 pygame.draw.polygon(self.window,obj.shades[i],[obj.projected_points[obj.quads[i,0]], obj.projected_points[obj.quads[i,1]], obj.projected_points[obj.quads[i,2]], obj.projected_points[obj.quads[i,3]]])
 
+            # Draw quad selection outline
             if self.mode[0] =='edit':
                 for i in obj.selected_quads:
                     pygame.draw.polygon(self.window,(255, 167, 66),np.array([obj.projected_points[obj.quads[i,0]], obj.projected_points[obj.quads[i,1]], obj.projected_points[obj.quads[i,2]], obj.projected_points[obj.quads[i,3]]]),width=2) 
@@ -497,27 +561,28 @@ class Window:
         pygame.display.update()
     
     def get_mouse_pos(self):
+        # position relative to origin
         pos = pygame.mouse.get_pos() - self.origin
         return pos
     
 
     def select_object(self,pos ,clear=True):
+        # clear the selection
         if clear:
             for obj in self.objects:
                 obj.is_selected = False
             self.selected_objects = []
+            self.active_object = self.objects[-1]
         
+        # Check hit box
         for i in range(self.objects.shape[0]):
             points = self.objects[i].projected_points
             max_x = points[:,0].max()
             max_y = points[:,1].max()
             min_x = points[:,0].min()
             min_y = points[:,1].min()
-            print(pos)
-            print("max_x "+str(max_x))
-            print("min_x "+str(min_x))
-            print("max_y "+str(max_y))
-            print("min_y "+str(min_y))
+            
+            #if hit
             if pos[0] > min_x and pos[0] < max_x and pos[1] > min_y and pos[1] < max_y:
                 self.selected_objects.append(i)
                 self.active_object = self.objects[i]
@@ -525,15 +590,13 @@ class Window:
 
                 return
 
-        self.selected_objects = []
-
-
-
 
     def get_tranform_magnitute(self):
+        
         drag_vector = self.get_mouse_pos() - self.mouse_last_pos 
         drag_magnitude = np.linalg.norm(drag_vector)
         self.mouse_last_pos = self.get_mouse_pos()
+        # Calculate angle
         cos = drag_vector[0]/drag_magnitude
         rad = np.arccos(np.clip(cos, -1.0, 1.0))
         deg = np.rad2deg(rad)
@@ -547,7 +610,11 @@ class Window:
     
     def update(self):
 
+        # APPLY THE CAMERA TRANSFORM
         self.camera_control()
+
+        # APPLY THE OBJECT/QUAD TRANSFORMATION
+        # Scale
         if self.mode[1] == 'scale':
             
             drag_magnitude, deg = self.get_tranform_magnitute()
@@ -564,6 +631,7 @@ class Window:
                     else:
                         obj.scale_quads(self.active_axis/(1+drag_magnitude))
         
+        # Rotate
         if self.mode[1] == 'rotate':
             drag_magnitude, deg = self.get_tranform_magnitute()
             
@@ -575,7 +643,8 @@ class Window:
                         obj.rotate(self.active_axis*(-drag_magnitude))
                     else:
                         obj.rotate_quads(self.active_axis*(-drag_magnitude))
-    
+
+        # Translate
         if self.mode[1] == 'translate':
             drag_magnitude, deg = self.get_tranform_magnitute()   
             camera_rot = np.rad2deg(self.camera.rotation[1])
@@ -600,17 +669,19 @@ class Window:
                     else:
                         obj.translate_quads(100*drag_magnitude*axis)
 
+        # Extrude
         if self.mode[1] == 'extrude':
             
             self.active_axis = self.active_object.extrude()
             self.mode[1] = 'translate'
 
-        
+        # Inset
         if self.mode[1] == 'inset':
             self.active_object.extrude()
             self.active_object.scale_quads(self.active_axis*0.5)
             self.mode[1] = 'scale'
 
+        # projecting each object to 2D
         for obj in self.objects:
             obj.project_to_2d(self.origin, self.camera.get_camera_tranform())
 
@@ -625,5 +696,4 @@ class Window:
                 self.camera.rotate((0,-0.00005*self.drag_vector[0],0))
 
 if __name__ == "__main__":
-    Window(900,600, 60).main()
-    
+    Window(1900,1000, 60).main()
