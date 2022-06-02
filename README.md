@@ -6,7 +6,7 @@ the camera and view them from different angles. The 3D geometry can be transform
 interactively.
 
 Check 
-[Project Report](Blunder_ A 3D Modelling Software.pdf) 
+[Blunder_ A 3D Modelling Software.pdf](Blunder_%20A%203D%20Modelling%20Software.pdf) 
 for more details
 
 ![image](https://user-images.githubusercontent.com/67947150/171650421-4c2c2fc1-bddf-4e38-a404-5363597f1168.png)
